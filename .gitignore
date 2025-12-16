@@ -1,6 +1,7 @@
 # STM32CubeIDE specific
-/Debug/
-/Release/
+.settings/
+Debug/
+Release/
 *.elf
 *.bin
 *.hex
