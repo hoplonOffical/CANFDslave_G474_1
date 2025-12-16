@@ -1,0 +1,14 @@
+# STM32CubeIDE specific
+/Debug/
+/Release/
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.d
+*.su
+
+# System
+Thumbs.db
+.DS_Store

@@ -1,0 +1,13 @@
+../Core/Src/main.c:99:5:main	11
+../Core/Src/main.c:246:6:SystemClock_Config	3
+../Core/Src/main.c:288:6:CAN1_SetFilter	3
+../Core/Src/main.c:307:6:CAN2_SetFilter	3
+../Core/Src/main.c:326:6:CAN1_SetTxHeader	1
+../Core/Src/main.c:338:6:CAN2_SetTxHeader	1
+../Core/Src/main.c:350:6:HAL_FDCAN_RxFifo0Callback	2
+../Core/Src/main.c:357:6:HAL_FDCAN_RxFifo1Callback	2
+../Core/Src/main.c:364:6:CAN_Diagnose_Status	20
+../Core/Src/main.c:427:19:CAN_Setup_Debug_Notifications	1
+../Core/Src/main.c:435:6:HAL_FDCAN_ErrorStatusCallback	2
+../Core/Src/main.c:455:6:BSP_PB_Callback	2
+../Core/Src/main.c:467:6:Error_Handler	1
