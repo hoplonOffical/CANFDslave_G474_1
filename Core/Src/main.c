@@ -151,9 +151,7 @@ int main(void)
   /* USER CODE BEGIN BSP */
 
   /* -- Sample board code to send message over COM1 port ---- */
-#ifdef DEBUG_MODE
   printf("Welcome to STM32 world !\r\n");
-#endif
 
   /* -- Sample board code to switch on led ---- */
   BSP_LED_On(LED_GREEN);
@@ -218,28 +216,31 @@ int main(void)
       BSP_LED_Toggle(LED_GREEN);
 
       /* ..... Perform your action ..... */
-      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
+//      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     }
-//    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     if (can2_RxCompleteFlag == 1) {
       can2_RxCompleteFlag = 0;
-      printf("FDCAN2 Received ID: 0x%03lX\r\n", RxHeader_Echo.Identifier);
       HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader_Echo, RxData_Echo);
     }
 
     if (can1_RxCompleteFlag == 1) {
-      tmpCount++;
       can1_RxCompleteFlag = 0;
+    }
+
+    tmpCount++;
+    if(tmpCount % 500 == 0) {
+      printf("FDCAN2 Received ID: 0x%03lX\r\n", RxHeader_Echo.Identifier);
       printf("[%lu] FDCAN1 Received ID: 0x%03lX\r\n",tmpCount, RxHeader.Identifier);
     }
 
     CAN_Diagnose_Status(&hfdcan1);
     CAN_Diagnose_Status(&hfdcan2);
 
-    HAL_Delay(100);
+    HAL_Delay(10);
   }
   /* USER CODE END 3 */
 }
