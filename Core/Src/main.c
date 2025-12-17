@@ -216,7 +216,7 @@ int main(void)
       BSP_LED_Toggle(LED_GREEN);
 
       /* ..... Perform your action ..... */
-//      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
+      // HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     }
     /* USER CODE END WHILE */
 
