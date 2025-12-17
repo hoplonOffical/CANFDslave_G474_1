@@ -35,7 +35,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DEBUG_MODE
+#define SystemCoreClock_Hz  160000000U
+#define FDCAN_PCLK_Hz       80000000U
+#define MegaUnit            1000000U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -159,6 +162,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   uint32_t tmpSystemClock = HAL_RCC_GetSysClockFreq();
   uint32_t tmpPeripheralClock = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_FDCAN);
+  
   printf("System Clock frequency = %lu MHz\r\n", tmpSystemClock / 1000000);
   printf("FDCAN Peripheral Clock frequency = %lu MHz\r\n", tmpPeripheralClock / 1000000);
   HAL_Delay(10);
@@ -212,28 +216,31 @@ int main(void)
       BSP_LED_Toggle(LED_GREEN);
 
       /* ..... Perform your action ..... */
-//      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
+      // HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     }
-    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     if (can2_RxCompleteFlag == 1) {
       can2_RxCompleteFlag = 0;
-      printf("FDCAN2 Received ID: 0x%03lX\r\n", RxHeader_Echo.Identifier);
       HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader_Echo, RxData_Echo);
     }
 
     if (can1_RxCompleteFlag == 1) {
-      tmpCount++;
       can1_RxCompleteFlag = 0;
+    }
+
+    tmpCount++;
+    if(tmpCount % 500 == 0) {
+      printf("FDCAN2 Received ID: 0x%03lX\r\n", RxHeader_Echo.Identifier);
       printf("[%lu] FDCAN1 Received ID: 0x%03lX\r\n",tmpCount, RxHeader.Identifier);
     }
 
     CAN_Diagnose_Status(&hfdcan1);
     CAN_Diagnose_Status(&hfdcan2);
 
-    HAL_Delay(100);;
+    HAL_Delay(10);
   }
   /* USER CODE END 3 */
 }
