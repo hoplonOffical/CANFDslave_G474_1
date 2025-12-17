@@ -68,6 +68,7 @@ void MX_FDCAN1_Init(void)
   /* TdcOffset: Data Prescaler * Data TimeSeg1 */
   uint8_t tmpTdcOffset;
   tmpTdcOffset = (uint8_t)hfdcan1.Init.DataPrescaler * (uint8_t)hfdcan1.Init.DataTimeSeg1;
+  tmpTdcOffset = tmpTdcOffset + 1;
   if (HAL_FDCAN_ConfigTxDelayCompensation(&hfdcan1, tmpTdcOffset, 1) != HAL_OK)
   {
     Error_Handler();
@@ -119,6 +120,7 @@ void MX_FDCAN2_Init(void)
   /* TdcOffset: Data Prescaler * Data TimeSeg1 */
   uint8_t tmpTdcOffset;
   tmpTdcOffset = (uint8_t)hfdcan2.Init.DataPrescaler * (uint8_t)hfdcan2.Init.DataTimeSeg1;
+  tmpTdcOffset = tmpTdcOffset + 1;
   if (HAL_FDCAN_ConfigTxDelayCompensation(&hfdcan2, tmpTdcOffset, 1) != HAL_OK)
   {
     Error_Handler();
@@ -168,6 +170,7 @@ void MX_FDCAN3_Init(void)
   /* TdcOffset: Data Prescaler * Data TimeSeg1 */
   uint8_t tmpTdcOffset;
   tmpTdcOffset = (uint8_t)hfdcan3.Init.DataPrescaler * (uint8_t)hfdcan3.Init.DataTimeSeg1;
+  tmpTdcOffset = tmpTdcOffset + 1;
   if (HAL_FDCAN_ConfigTxDelayCompensation(&hfdcan3, tmpTdcOffset, 0) != HAL_OK)
   {
     Error_Handler();

@@ -35,7 +35,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DEBUG_MODE
+#define SystemCoreClock_Hz  160000000U
+#define FDCAN_PCLK_Hz       80000000U
+#define MegaUnit            1000000U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -148,7 +151,9 @@ int main(void)
   /* USER CODE BEGIN BSP */
 
   /* -- Sample board code to send message over COM1 port ---- */
+#ifdef DEBUG_MODE
   printf("Welcome to STM32 world !\r\n");
+#endif
 
   /* -- Sample board code to switch on led ---- */
   BSP_LED_On(LED_GREEN);
@@ -159,6 +164,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   uint32_t tmpSystemClock = HAL_RCC_GetSysClockFreq();
   uint32_t tmpPeripheralClock = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_FDCAN);
+  
   printf("System Clock frequency = %lu MHz\r\n", tmpSystemClock / 1000000);
   printf("FDCAN Peripheral Clock frequency = %lu MHz\r\n", tmpPeripheralClock / 1000000);
   HAL_Delay(10);
@@ -212,9 +218,9 @@ int main(void)
       BSP_LED_Toggle(LED_GREEN);
 
       /* ..... Perform your action ..... */
-//      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
+      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     }
-    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
+//    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -233,7 +239,7 @@ int main(void)
     CAN_Diagnose_Status(&hfdcan1);
     CAN_Diagnose_Status(&hfdcan2);
 
-    HAL_Delay(100);;
+    HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
