@@ -39,6 +39,28 @@
 #define SystemCoreClock_Hz  160000000U
 #define FDCAN_PCLK_Hz       80000000U
 #define MegaUnit            1000000U
+
+#define MASTER_ID          0x100
+
+#define SLAVE_ID_BASE      0x200
+#define SLAVE_ID_END       0x2FF
+#define SLAVE_ID_ECHO      0x300
+
+// CAN slave ID는 0x200 + 지정된 node 번호를 부여
+// node1: 0x201, node2: 0x202, ...
+// 노드 번호를 매크로로 보드마다 지정
+// 자동화된 형태로 SLAVE_ID를 설정하도록 하는 방법 알려줘
+#ifndef NODE_NUMBER
+  #define NODE_NUMBER  1U // 기본값 1, 빌드 시 -DNODE_NUMBER=x 로 변경 가능
+#endif
+#define SLAVE_ID         (SLAVE_ID_BASE + NODE_NUMBER)
+/* Example: NODE_NUMBER가 3으로 설정된 경우 SLAVE_ID는 0x203이 됨 */
+/* Example: NODE_NUMBER가 5으로 설정된 경우 SLAVE_ID는 0x205이 됨 */
+// SLAVE_ID가 SLAVE_ID_END를 초과하지 않도록 주의 필요
+#if SLAVE_ID > SLAVE_ID_END
+  #error "SLAVE_ID exceeds the maximum allowed value. Please check NODE_NUMBER."
+#endif
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -53,40 +75,32 @@ __IO uint32_t BspButtonState = BUTTON_RELEASED;
 
 /* USER CODE BEGIN PV */
 FDCAN_TxHeaderTypeDef TxHeader;
-FDCAN_TxHeaderTypeDef TxHeader_Echo;
-
 FDCAN_RxHeaderTypeDef RxHeader;
-FDCAN_RxHeaderTypeDef RxHeader_Echo;
-uint8_t TxData[16] = { 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55,
-    0xAA, 0x55, 0xAA };
+
+uint8_t TxData[16] = { 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55,
+    0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA };
 uint8_t RxData[16] = { 0 };
-uint8_t RxData_Echo[16] = { 0 };
 
-__IO uint8_t can1_TxCompleteFlag = 0;
-__IO uint8_t can1_RxCompleteFlag = 0;
-
-__IO uint8_t can2_TxCompleteFlag = 0;
-__IO uint8_t can2_RxCompleteFlag = 0;
+__IO uint8_t TxCompleteFlag = 0;
+__IO uint8_t RxCompleteFlag = 0;
 
 uint32_t tmpCount = 0;
 
-FDCAN_ErrorCountersTypeDef FDCAN_ErrorCount_master;
 FDCAN_ErrorCountersTypeDef FDCAN_ErrorCount_slave;
-FDCAN_ProtocolStatusTypeDef FDCAN_ProtocolStatus_master;
 FDCAN_ProtocolStatusTypeDef FDCAN_ProtocolStatus_slave;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void CAN1_SetFilter(void);
-void CAN2_SetFilter(void);
+void canSetInitFilter(void);
+void canSetInitInterrupts(void);
+void canSetInitTxHeader(void);
+void canSetInitTxPayload(void);
+void canStart(void);
 
-void CAN1_SetTxHeader(void);
-void CAN2_SetTxHeader(void);
-
-void CAN_Diagnose_Status(FDCAN_HandleTypeDef *hfdcan);
-HAL_StatusTypeDef CAN_Setup_Debug_Notifications(FDCAN_HandleTypeDef *hfdcan);
+ErrorStatus canDiagnoseStatus(FDCAN_HandleTypeDef *hfdcan);
+HAL_StatusTypeDef canSetupDebugNotifications(FDCAN_HandleTypeDef *hfdcan);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -169,78 +183,32 @@ int main(void)
 
   /* --- Configure FDCAN1 --- */
   /* Configure FDCAN1 filters */
-  CAN1_SetFilter();
-  /* Activate FDCAN1 RX FIFO 0 new message notification */
-  if(HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
-    Error_Handler();
-  }
-  /* Setup FDCAN1 debug notifications */
-  if(CAN_Setup_Debug_Notifications(&hfdcan1) != HAL_OK) {
-    Error_Handler();
-  }
-
-  /* --- Configure FDCAN2 --- */
-  /* Configure FDCAN2 filters */
-  CAN2_SetFilter();
-  /* Activate FDCAN2 RX FIFO 1 new message notification */
-  if(HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK) {
-    Error_Handler();
-  }
-  /* Setup FDCAN2 debug notifications */
-  if(CAN_Setup_Debug_Notifications(&hfdcan2) != HAL_OK) {
-    Error_Handler();
-  }
-
+  canSetInitFilter();
+  /* Configure FDCAN1 interrupts */
+  canSetInitInterrupts();
   /* Configure Tx Headers */
-  CAN1_SetTxHeader();
-  CAN2_SetTxHeader();
+  canSetInitTxHeader();
+  /* Configure Tx Payload */  
+  canSetInitTxPayload();
 
-  /* Start FDCAN1 */
-  if(HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
-    Error_Handler();
-  }
-  /* Start FDCAN2 */
-  if (HAL_FDCAN_Start(&hfdcan2) != HAL_OK) {
-    Error_Handler();
-  }
-
+  /* Start FDCAN1 module */
+  canStart();
   while (1)
   {
-
-    /* -- Sample board code for User push-button in interrupt mode ---- */
-    if (BspButtonState == BUTTON_PRESSED)
-    {
-      /* Update button state */
-      BspButtonState = BUTTON_RELEASED;
-      /* -- Sample board code to toggle led ---- */
-      BSP_LED_Toggle(LED_GREEN);
-
-      /* ..... Perform your action ..... */
-      // HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
-    if (can2_RxCompleteFlag == 1) {
-      can2_RxCompleteFlag = 0;
-      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader_Echo, RxData_Echo);
+    if(RxCompleteFlag) {
+      RxCompleteFlag = 0;
+      // 수신된 메시지 처리
+      // 예: 수신된 데이터 출력
+      tmpCount++;
+      if(tmpCount % 500 == 0) {
+        printf("[%lu] FDCAN1 Received ID: 0x%03lX\r\n",tmpCount, RxHeader.Identifier);
+      }
     }
 
-    if (can1_RxCompleteFlag == 1) {
-      can1_RxCompleteFlag = 0;
-    }
-
-    tmpCount++;
-    if(tmpCount % 500 == 0) {
-      printf("FDCAN2 Received ID: 0x%03lX\r\n", RxHeader_Echo.Identifier);
-      printf("[%lu] FDCAN1 Received ID: 0x%03lX\r\n",tmpCount, RxHeader.Identifier);
-    }
-
-    CAN_Diagnose_Status(&hfdcan1);
-    CAN_Diagnose_Status(&hfdcan2);
-
-    HAL_Delay(10);
+    canDiagnoseStatus(&hfdcan1);
   }
   /* USER CODE END 3 */
 }
@@ -291,15 +259,16 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void CAN1_SetFilter(void) {
+
+void canSetInitFilter(void) {
   FDCAN_FilterTypeDef sFilterConfig;
 
   sFilterConfig.IdType = FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
   sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x200;
-  sFilterConfig.FilterID2 = 0x7FF;
+  sFilterConfig.FilterID1 = MASTER_ID;
+  sFilterConfig.FilterID2 = 0x7FF; // 모든 비트 매칭
   if(HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
     Error_Handler();
   }
@@ -310,27 +279,20 @@ void CAN1_SetFilter(void) {
   }
 }
 
-void CAN2_SetFilter(void) {
-  FDCAN_FilterTypeDef sFilterConfig;
-
-  sFilterConfig.IdType = FDCAN_STANDARD_ID;
-  sFilterConfig.FilterIndex = 0;
-  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
-  sFilterConfig.FilterID1 = 0x100;
-  sFilterConfig.FilterID2 = 0x7FF;
-  if(HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
-    Error_Handler();
+void canSetInitInterrupts(void) {
+    /* Activate FDCAN1 RX FIFO 0 new message notification */
+    if(HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+      Error_Handler();
+    }
+    /* Setup FDCAN1 debug notifications */
+    if(canSetupDebugNotifications(&hfdcan1) != HAL_OK) {
+      Error_Handler();
+    }
   }
 
-  if(HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT_REMOTE,
-  FDCAN_REJECT_REMOTE) != HAL_OK) {
-    Error_Handler();
-  }
-}
-
-void CAN1_SetTxHeader(void) {
-  TxHeader.Identifier = 0x100;
+void canSetInitTxHeader(void) {
+  //TxHeader.Identifier = SLAVE_ID; // 노드 번호에 따라 다른 ID 설정, ex. 0x201, 0x202, ...
+  TxHeader.Identifier = 0x200; // 테스트용으로 마스터 ID로 설정
   TxHeader.IdType = FDCAN_STANDARD_ID;
   TxHeader.TxFrameType = FDCAN_DATA_FRAME;
   TxHeader.DataLength = FDCAN_DLC_BYTES_16;
@@ -341,33 +303,26 @@ void CAN1_SetTxHeader(void) {
   TxHeader.MessageMarker = 0;
 }
 
-void CAN2_SetTxHeader(void) {
-  TxHeader_Echo.Identifier = 0x200;
-  TxHeader_Echo.IdType = FDCAN_STANDARD_ID;
-  TxHeader_Echo.TxFrameType = FDCAN_DATA_FRAME;
-  TxHeader_Echo.DataLength = FDCAN_DLC_BYTES_16;
-  TxHeader_Echo.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  TxHeader_Echo.BitRateSwitch = FDCAN_BRS_ON;
-  TxHeader_Echo.FDFormat = FDCAN_FD_CAN;
-  TxHeader_Echo.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  TxHeader_Echo.MessageMarker = 0;
+void canSetInitTxPayload(void) {
+  /*for (uint8_t i = 0; i < 16; i++) {
+    TxData[i] = (uint8_t)(i + NODE_NUMBER); // 노드 번호에 따라 다른 데이터 전송
+  }*/
+}
+
+void canStart(void) {
+  if(HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
+    Error_Handler();
+  }
 }
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
   if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET) {
     HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData);
-    can1_RxCompleteFlag = 1;
+    RxCompleteFlag = 1;
   }
 }
 
-void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs) {
-  if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != RESET) {
-    HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader_Echo, RxData_Echo);
-    can2_RxCompleteFlag = 1;
-  }
-}
-
-void CAN_Diagnose_Status(FDCAN_HandleTypeDef *hfdcan) {
+ErrorStatus canDiagnoseStatus(FDCAN_HandleTypeDef *hfdcan) {
   FDCAN_ProtocolStatusTypeDef FDCAN_Status = { 0 };
   FDCAN_ErrorCountersTypeDef FDCAN_Errors = { 0 };
   char instance_char[10] = { 0 };
@@ -384,25 +339,28 @@ void CAN_Diagnose_Status(FDCAN_HandleTypeDef *hfdcan) {
   if (FDCAN_Status.LastErrorCode == FDCAN_PROTOCOL_ERROR_NONE &&
       FDCAN_Status.Activity != 0 &&
       FDCAN_Errors.TxErrorCnt == 0 && FDCAN_Errors.RxErrorCnt == 0) {
-    return;
+    return SUCCESS;
   }
 
-  // 인스턴스 구분 출력
-  if (hfdcan->Instance == FDCAN1) strcpy(instance_char, "FDCAN1");
-  else if (hfdcan->Instance == FDCAN2) strcpy(instance_char, "FDCAN2");
+  /*// 인스턴스 구분 출력
+  if (hfdcan->Instance == FDCAN1) strcpy(instance_char, "FDCAN1");*/
 
   // 2. 심각도 순서로 버스 상태 체크 (Bus-Off -> Passive -> Warning)
   if (FDCAN_Status.BusOff) {
-    printf("[%s][CRITICAL] Bus-Off (Comm. Disabled)\r\n", instance_char);
+    return ERROR;
+    //printf("[%s][CRITICAL] Bus-Off (Comm. Disabled)\r\n", instance_char);
     // Bus-Off 복구 로직 필요 시 여기에 추가 (ex. HAL_FDCAN_Init)
   }
   else if (FDCAN_Status.ErrorPassive) {
-    printf("[%s][STATE] Error Passive (Only Listen or Passive Flag)\r\n", instance_char);
+    return ERROR;
+    //printf("[%s][STATE] Error Passive (Only Listen or Passive Flag)\r\n", instance_char);
   }
   else if (FDCAN_Status.Warning) {
-    printf("[%s][STATE] Error Warning (TEC or REC >= 96)\r\n", instance_char);
+    return ERROR;
+    //printf("[%s][STATE] Error Warning (TEC or REC >= 96)\r\n", instance_char);
   }
   else {
+    return SUCCESS;
     // printf("[STATE] Error Active (Normal)\r\n"); // 필요 시 주석 해제
   }
 
@@ -430,7 +388,7 @@ void CAN_Diagnose_Status(FDCAN_HandleTypeDef *hfdcan) {
 }
 
 /* 인터럽트 활성화 설정 (Init 단계에 추가 필요) */
-HAL_StatusTypeDef CAN_Setup_Debug_Notifications(FDCAN_HandleTypeDef *hfdcan) {
+HAL_StatusTypeDef canSetupDebugNotifications(FDCAN_HandleTypeDef *hfdcan) {
   // Bus-Off, Error Passive, Protocol Error 발생 시 인터럽트 발생
   HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_BUS_OFF |
                                          FDCAN_IT_ERROR_PASSIVE |
